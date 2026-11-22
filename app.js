@@ -157,30 +157,81 @@
   showSlide(0, false);
 
   const records = all(".pub-record");
-  const filters = all("[data-filter]");
-  function filterTopics(topic) {
-    let count = 0;
-    for (const record of records) {
-      record.hidden =
-        topic !== "all" && !record.dataset.topics.split(" ").includes(topic);
-      if (!record.hidden) count++;
-    }
-    filters.forEach((b) =>
-      b.setAttribute("aria-pressed", String(b.dataset.filter === topic)),
+  const kindButtons = all("[data-kind-filter]");
+  const topicSelect = select("#topic-filter");
+  const showWorks = select("#show-works");
+  const initialPageSize = 6;
+  let kind = "all",
+    expanded = false;
+  function renderArchive() {
+    const topic = topicSelect.value;
+    const matching = records.filter(
+      (r) =>
+        (kind === "all" || r.dataset.kind === kind) &&
+        (topic === "all" || r.dataset.topics.split(" ").includes(topic)),
     );
+    const visible = expanded ? matching : matching.slice(0, initialPageSize);
+    const shown = new Set(visible);
+    for (const record of records) record.hidden = !shown.has(record);
+    for (const button of kindButtons)
+      button.setAttribute(
+        "aria-pressed",
+        String(button.dataset.kindFilter === kind),
+      );
     select("#results").textContent =
-      count + (es ? " publicaciones" : " publications");
+      matching.length === 0
+        ? es
+          ? "Ningún trabajo coincide con estos filtros."
+          : "No works match these filters."
+        : (es ? "Se muestran " : "Showing ") +
+          visible.length +
+          (es ? " de " : " of ") +
+          matching.length +
+          (es ? " trabajos." : " works.");
+    showWorks.hidden = visible.length === matching.length;
+    showWorks.textContent =
+      (es ? "Ver los " : "Show all ") +
+      matching.length +
+      (es ? " trabajos" : " works");
   }
-  filters.forEach((button) =>
-    button.addEventListener("click", () => filterTopics(button.dataset.filter)),
+  kindButtons.forEach((button) =>
+    button.addEventListener("click", () => {
+      kind = button.dataset.kindFilter;
+      expanded = false;
+      renderArchive();
+    }),
   );
+  topicSelect.addEventListener("change", () => {
+    expanded = false;
+    renderArchive();
+  });
+  showWorks.addEventListener("click", () => {
+    const firstNew = records.find(
+      (r) =>
+        r.hidden &&
+        (kind === "all" || r.dataset.kind === kind) &&
+        (topicSelect.value === "all" ||
+          r.dataset.topics.split(" ").includes(topicSelect.value)),
+    );
+    expanded = true;
+    renderArchive();
+    if (firstNew) {
+      firstNew.tabIndex = -1;
+      firstNew.focus();
+    }
+  });
+  renderArchive();
 
   function revealDestination(hash) {
     if (!hash.startsWith("#")) return;
     const destination = document.getElementById(hash.slice(1));
     if (!destination) return;
-    if (destination.matches(".pub-record") && destination.hidden)
-      filterTopics("all");
+    if (destination.matches(".pub-record") && destination.hidden) {
+      kind = "all";
+      topicSelect.value = "all";
+      expanded = true;
+      renderArchive();
+    }
     if (destination.matches("details")) destination.open = true;
   }
   document.addEventListener("click", (e) => {
@@ -202,7 +253,7 @@
       select(".pub-year", entry).textContent + " · " + header.textContent;
     const title = document.createElement("h2");
     title.id = "dialog-title";
-    title.lang = "en";
+    title.lang = select("h3", entry).lang;
     title.textContent = select("h3", entry).textContent;
     body.append(header, title);
     [".translation", ".authors", ".pub-topics"].forEach((selector) => {
